@@ -8,12 +8,28 @@ var labels = [];
 
 var animation = document.getElementById('anim');
 
+var hasScreenOrientationAPI = function () {
+  return window.hasOwnProperty('screen')
+    && typeof window.screen.orientation !== 'undefined'
+    && typeof window.screen.orientation.angle !== 'undefined';
+}();
+
+var screenOrientationAngle;
+
+var alpha, beta, gamma;
+
+var _Math = THREE.Math;
+
+var degToRad = _Math.degToRad;
+
+var quaternionRotationThreshold = degToRad(0.1);
+
 init();
 animate();
 
 function AltAzToVec3(altitude, azimuth, dist, vec3) {
-  altitude = THREE.Math.degToRad(90 - altitude);
-  azimuth = THREE.Math.degToRad(azimuth);
+  altitude = degToRad(90 - altitude);
+  azimuth = degToRad(azimuth);
 
   var sinZen = Math.sin(altitude),
     cosZen = Math.cos(altitude),
@@ -45,8 +61,8 @@ function generateTexture(canvas, text) {
   var textWidth = context.measureText(text).width,
     textHeight = calculateFontHeight(context.font);
 
-  canvas.width = Math.max(canvas.width, THREE.Math.ceilPowerOfTwo(textWidth));
-  canvas.height = Math.max(canvas.height, THREE.Math.ceilPowerOfTwo(textHeight));
+  canvas.width = Math.max(canvas.width, _Math.ceilPowerOfTwo(textWidth));
+  canvas.height = Math.max(canvas.height, _Math.ceilPowerOfTwo(textHeight));
 
   var _rgb = new THREE.Color(textColor);
   context.fillStyle = 'rgba(' + _rgb.r * 255 + ',' + _rgb.g * 255 + ',' + _rgb.b * 255 + ', 0.01)';
@@ -91,7 +107,7 @@ function init() {
 
   scene = new THREE.Scene();
 
-  camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 2000);
+  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 2000);
   camera.position.set(0, 1, 0);
   camera.rotation.order = 'YXZ';
 
@@ -136,7 +152,7 @@ function init() {
 
   scene.add(line);
 
-  window.addEventListener('resize', function() {
+  window.addEventListener('resize', function () {
     camera.aspect = window.innerWidth / window.innerHeight;
     renderer.setSize(window.innerWidth, window.innerHeight);
     camera.updateProjectionMatrix();
@@ -144,37 +160,84 @@ function init() {
   });
 
   if (window.hasOwnProperty('ondeviceorientation')) {
-    window.addEventListener('deviceorientation', function _typeChecker(event) {
-      if (event.alpha !== null && event.beta !== null && event.gamma !== null) {
-        window.addEventListener('deviceorientation', rotateCamera);
-      } else {
-        console.log('not supported');
-      }
+    window.addEventListener('deviceorientation', onDeviceOrientation);
+  }
 
-      window.removeEventListener('deviceorientation', _typeChecker);
+  onScreenOrientationChanged(false);
+
+  if (hasScreenOrientationAPI) {
+    window.screen.orientation.addEventListener('change', function () {
+      onScreenOrientationChanged(true);
     });
-  } else if (window.hasOwnProperty('ondeviceorientationabsolute')) {
-    window.addEventListener('deviceorientationabsolute', function _typeChecker(event) {
-      if (event.alpha !== null && event.beta !== null && event.gamma !== null) {
-        window.addEventListener('deviceorientationabsolute', rotateCamera);
-      } else {
-        console.log('not supported');
-      }
-
-      window.removeEventListener('deviceorientationabsolute', _typeChecker);
+  } else {
+    window.addEventListener('orientationchange', function () {
+      onScreenOrientationChanged(true);
     });
   }
 }
 
-function rotateCamera(e) {
-  console.log(e);
+function onDeviceOrientation(event) {
+  if (event.alpha === null || event.beta === null || event.gamma === null) {
+    window.removeEventListener('deviceorientation', onDeviceOrientation);
+    return;
+  }
+
+  alpha = degToRad(event.alpha);
+  beta = degToRad(event.beta);
+  gamma = degToRad(event.gamma);
+
+  updateCameraQuaternion();
 }
+
+function onScreenOrientationChanged(updateQuaternion) {
+  screenOrientationAngle = _calculateScreenOrientationAngle();
+  if (updateQuaternion) {
+    updateCameraQuaternion();
+  }
+}
+
+function _calculateScreenOrientationAngle() {
+  return degToRad(hasScreenOrientationAPI ? (window.screen.orientation.angle || 0) : (window.orientation || 0));
+}
+
+var updateCameraQuaternion = (function () {
+  var resultQuaternion = new THREE.Quaternion(),
+    previousQuaternion = new THREE.Quaternion();
+
+  var _setQuaternionFromEulerOrientation = (function () {
+    var xAxis = new THREE.Vector3(1, 0, 0),
+      zAxis = new THREE.Vector3(0, 0, 1),
+      euler = new THREE.Euler(),
+      qOrientation = new THREE.Quaternion(),
+      qX = new THREE.Quaternion().setFromAxisAngle(xAxis, -Math.PI / 2); // -90 deg around x-axis
+
+    return function (q, a, b, g, o) {
+      euler.set(b, Math.PI / 2 + a, -g, 'YXZ');    // 'ZXY' for the device, but 'YXZ' for us, 90 deg around y-axis
+      return q
+        .setFromEuler(euler)                                        // orient the device
+        .multiply(qX)                                               // camera looks out the back of the device, not the top
+        .multiply(qOrientation.setFromAxisAngle(zAxis, -o));   // adjust for screen orientation
+    };
+  }());
+  return function () {
+    _setQuaternionFromEulerOrientation(resultQuaternion, alpha, beta, gamma, screenOrientationAngle);
+
+    if (resultQuaternion.angleTo(previousQuaternion) < quaternionRotationThreshold) {
+      return;
+    }
+
+    previousQuaternion.copy(resultQuaternion);
+    camera.quaternion.copy(resultQuaternion);
+
+    sceneUpdated = true;
+  };
+}());
 
 function animate() {
   requestAnimationFrame(animate);
 
   if (sceneUpdated) {
-    labels.forEach(function(label) {
+    labels.forEach(function (label) {
       label.material.rotation = -camera.rotation.z;
     });
 
