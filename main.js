@@ -4,7 +4,7 @@ var textColor = 'white';
 
 var sceneUpdated = true;
 
-var labels = [];
+var rotatedLabels = [];
 
 var animation = document.getElementById('anim');
 
@@ -27,7 +27,7 @@ var quaternionRotationThreshold = degToRad(0.1);
 init();
 animate();
 
-function AltAzToVec3(altitude, azimuth, dist, vec3) {
+function altAzToVec3(altitude, azimuth, dist, vec3) {
   altitude = degToRad(90 - altitude);
   azimuth = degToRad(azimuth);
 
@@ -82,9 +82,8 @@ function generateTexture(canvas, text) {
   return canvas;
 }
 
-
 function createLabelCanvasTexture(text) {
-  canvas = document.createElement('canvas');
+  var canvas = document.createElement('canvas');
   canvas.width = 1;
   canvas.height = 1;
 
@@ -104,7 +103,6 @@ function createLabelSprite(text) {
 }
 
 function init() {
-
   scene = new THREE.Scene();
 
   camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 2000);
@@ -124,23 +122,34 @@ function init() {
 
   var ground = new THREE.Mesh(new THREE.PlaneBufferGeometry(camera.far, camera.far), new THREE.MeshBasicMaterial({
     color: 'brown'
-  }));
-  ground.rotateX(-Math.PI / 2);
+  })).rotateX(-Math.PI / 2);
   scene.add(ground);
 
-  var label1 = createLabelSprite('Low label');
-  AltAzToVec3(10, 100, 1500, label1.position);
+  // Label sprites to be rotated by -camera.rotation.z
+  var label1 = createLabelSprite('10º label (rotated)');
+  altAzToVec3(10, 100, 1500, label1.position);
   scene.add(label1);
 
-  var label2 = createLabelSprite('High label');
-  AltAzToVec3(90, 100, 1500, label2.position);
+  var label2 = createLabelSprite('90º label (rotated)');
+  altAzToVec3(90, 100, 1500, label2.position);
   scene.add(label2);
 
-  var label3 = createLabelSprite('Middle label');
-  AltAzToVec3(45, 100, 1500, label3.position);
+  var label3 = createLabelSprite('45º label (rotated)');
+  altAzToVec3(45, 100, 1500, label3.position);
   scene.add(label3);
 
-  labels.push(label1, label2, label3);
+  // Label sprites not to be rotated
+  var label4 = createLabelSprite('10º label (non-rotated)');
+  altAzToVec3(10, 70, 1500, label4.position);
+  scene.add(label4);
+
+  var label5 = createLabelSprite('90º label (non-rotated)');
+  altAzToVec3(90, 70, 1500, label5.position);
+  scene.add(label5);
+
+  var label6 = createLabelSprite('45º label (non-rotated)');
+  altAzToVec3(45, 70, 1500, label6.position);
+  scene.add(label6);
 
   var geometry = new THREE.SphereBufferGeometry(camera.far, 90, 90),
     wireframe = new THREE.WireframeGeometry(geometry),
@@ -204,23 +213,24 @@ var updateCameraQuaternion = (function () {
   var resultQuaternion = new THREE.Quaternion(),
     previousQuaternion = new THREE.Quaternion();
 
-  var _setQuaternionFromEulerOrientation = (function () {
+  var setQuaternionFromEulerOrientation = (function () {
     var xAxis = new THREE.Vector3(1, 0, 0),
       zAxis = new THREE.Vector3(0, 0, 1),
       euler = new THREE.Euler(),
       qOrientation = new THREE.Quaternion(),
-      qX = new THREE.Quaternion().setFromAxisAngle(xAxis, -Math.PI / 2); // -90 deg around x-axis
+      qX = new THREE.Quaternion().setFromAxisAngle(xAxis, -Math.PI / 2);
 
     return function (q, a, b, g, o) {
-      euler.set(b, Math.PI / 2 + a, -g, 'YXZ');    // 'ZXY' for the device, but 'YXZ' for us, 90 deg around y-axis
+      euler.set(b, a, -g, 'YXZ');
       return q
-        .setFromEuler(euler)                                        // orient the device
-        .multiply(qX)                                               // camera looks out the back of the device, not the top
-        .multiply(qOrientation.setFromAxisAngle(zAxis, -o));   // adjust for screen orientation
+        .setFromEuler(euler)
+        .multiply(qX)
+        .multiply(qOrientation.setFromAxisAngle(zAxis, -o));
     };
   }());
+
   return function () {
-    _setQuaternionFromEulerOrientation(resultQuaternion, alpha, beta, gamma, screenOrientationAngle);
+    setQuaternionFromEulerOrientation(resultQuaternion, alpha, beta, gamma, screenOrientationAngle);
 
     if (resultQuaternion.angleTo(previousQuaternion) < quaternionRotationThreshold) {
       return;
@@ -237,7 +247,7 @@ function animate() {
   requestAnimationFrame(animate);
 
   if (sceneUpdated) {
-    labels.forEach(function (label) {
+    rotatedLabels.forEach(function (label) {
       label.material.rotation = -camera.rotation.z;
     });
 
