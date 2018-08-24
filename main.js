@@ -1,18 +1,31 @@
 var camera, scene, renderer;
 
-var textColor = 'white';
-
 var sceneUpdated = true;
 
 var rotatedLabels = [];
 
 var animation = document.getElementById('anim');
 
-var hasScreenOrientationAPI = function () {
-  return window.hasOwnProperty('screen')
-    && typeof window.screen.orientation !== 'undefined'
-    && typeof window.screen.orientation.angle !== 'undefined';
+var hasScreenOrientationAPI = function() {
+  return window.hasOwnProperty('screen') &&
+    typeof window.screen.orientation !== 'undefined' &&
+    typeof window.screen.orientation.angle !== 'undefined';
 }();
+
+var supportsPassive = false;
+
+(function() {
+  try {
+    var opts = Object.defineProperty({}, 'passive', {
+      get: function() {
+        supportsPassive = true;
+      }
+    });
+
+    window.addEventListener('testPassive', null, opts);
+    window.removeEventListener('testPassive', null, opts);
+  } catch (e) {}
+}());
 
 var screenOrientationAngle;
 
@@ -23,9 +36,6 @@ var _Math = THREE.Math;
 var degToRad = _Math.degToRad;
 
 var quaternionRotationThreshold = degToRad(0.1);
-
-init();
-animate();
 
 function altAzToVec3(altitude, azimuth, dist, vec3) {
   altitude = degToRad(90 - altitude);
@@ -54,44 +64,48 @@ function calculateFontHeight(fontStyle) {
   return res;
 }
 
-function generateTexture(canvas, text) {
-  var context = canvas.getContext('2d');
-  context.font = '96px Helvetica';
+var generateTexture = (function() {
+  var _rgb = new THREE.Color();
 
-  var textWidth = context.measureText(text).width,
-    textHeight = calculateFontHeight(context.font);
+  return function(canvas, text, textColor) {
+    var context = canvas.getContext('2d');
+    context.font = '96px Helvetica';
 
-  canvas.width = Math.max(canvas.width, _Math.ceilPowerOfTwo(textWidth));
-  canvas.height = Math.max(canvas.height, _Math.ceilPowerOfTwo(textHeight));
+    var textWidth = context.measureText(text).width,
+      textHeight = calculateFontHeight(context.font);
 
-  var _rgb = new THREE.Color(textColor);
-  context.fillStyle = 'rgba(' + _rgb.r * 255 + ',' + _rgb.g * 255 + ',' + _rgb.b * 255 + ', 0.01)';
-  context.fillRect(0, 0, canvas.width, canvas.height);
+    canvas.width = Math.max(canvas.width, _Math.ceilPowerOfTwo(textWidth));
+    canvas.height = Math.max(canvas.height, _Math.ceilPowerOfTwo(textHeight));
 
-  context.font = '96px Helvetica';
-  context.textAlign = 'left';
-  context.textBaseline = 'top';
-  context.fillStyle = textColor;
+    _rgb.set(textColor);
+    context.fillStyle = 'rgba(' + _rgb.r * 255 + ',' + _rgb.g * 255 + ',' + _rgb.b * 255 + ', 0.01)';
+    context.fillRect(0, 0, canvas.width, canvas.height);
 
-  context.fillText(
-    text,
-    (canvas.width - textWidth) / 2,
-    (canvas.height - textHeight) / 2
-  );
+    context.font = '96px Helvetica';
+    context.textAlign = 'left';
+    context.textBaseline = 'top';
+    context.fillStyle = textColor;
 
-  return canvas;
-}
+    context.fillText(
+      text,
+      (canvas.width - textWidth) / 2,
+      (canvas.height - textHeight) / 2
+    );
 
-function createLabelCanvasTexture(text) {
+    return canvas;
+  };
+}());
+
+function createLabelCanvasTexture(text, textColor) {
   var canvas = document.createElement('canvas');
   canvas.width = 1;
   canvas.height = 1;
 
-  return new THREE.CanvasTexture(generateTexture(canvas, text));
+  return new THREE.CanvasTexture(generateTexture(canvas, text, textColor));
 }
 
-function createLabelSprite(text) {
-  var texture = createLabelCanvasTexture(text);
+function createLabelSprite(text, textColor) {
+  var texture = createLabelCanvasTexture(text, textColor);
   var label = new THREE.Sprite(new THREE.SpriteMaterial({
     map: texture,
     transparent: true,
@@ -126,30 +140,30 @@ function init() {
   scene.add(ground);
 
   // Label sprites to be rotated by -camera.rotation.z
-  var label1 = createLabelSprite('10º label (rotated)');
+  var label1 = createLabelSprite('10º label (rotated)', 'red');
   altAzToVec3(10, 110, 1500, label1.position);
   scene.add(label1);
 
-  var label2 = createLabelSprite('90º label (rotated)');
+  var label2 = createLabelSprite('90º label (rotated)', 'red');
   altAzToVec3(90, 110, 1500, label2.position);
   scene.add(label2);
 
-  var label3 = createLabelSprite('45º label (rotated)');
+  var label3 = createLabelSprite('45º label (rotated)', 'red');
   altAzToVec3(45, 110, 1500, label3.position);
   scene.add(label3);
 
   rotatedLabels.push(label1, label2, label3);
 
   // Label sprites not to be rotated
-  var label4 = createLabelSprite('10º label (non-rotated)');
+  var label4 = createLabelSprite('10º label (non-rotated)', 'green');
   altAzToVec3(10, 60, 1500, label4.position);
   scene.add(label4);
 
-  var label5 = createLabelSprite('90º label (non-rotated)');
+  var label5 = createLabelSprite('90º label (non-rotated)', 'green');
   altAzToVec3(90, 60, 1500, label5.position);
   scene.add(label5);
 
-  var label6 = createLabelSprite('45º label (non-rotated)');
+  var label6 = createLabelSprite('45º label (non-rotated)', 'green');
   altAzToVec3(45, 60, 1500, label6.position);
   scene.add(label6);
 
@@ -163,7 +177,7 @@ function init() {
 
   scene.add(line);
 
-  window.addEventListener('resize', function () {
+  window.addEventListener('resize', function() {
     camera.aspect = window.innerWidth / window.innerHeight;
     renderer.setSize(window.innerWidth, window.innerHeight);
     camera.updateProjectionMatrix();
@@ -177,14 +191,20 @@ function init() {
   onScreenOrientationChanged(false);
 
   if (hasScreenOrientationAPI) {
-    window.screen.orientation.addEventListener('change', function () {
+    window.screen.orientation.addEventListener('change', function() {
       onScreenOrientationChanged(true);
     });
   } else {
-    window.addEventListener('orientationchange', function () {
+    window.addEventListener('orientationchange', function() {
       onScreenOrientationChanged(true);
     });
   }
+
+  document.addEventListener('touchmove', function(event) {
+    event.preventDefault();
+  }, supportsPassive ? {
+    passive: false
+  } : false);
 }
 
 function onDeviceOrientation(event) {
@@ -211,18 +231,18 @@ function _calculateScreenOrientationAngle() {
   return degToRad(hasScreenOrientationAPI ? (window.screen.orientation.angle || 0) : (window.orientation || 0));
 }
 
-var updateCameraQuaternion = (function () {
+var updateCameraQuaternion = (function() {
   var resultQuaternion = new THREE.Quaternion(),
     previousQuaternion = new THREE.Quaternion();
 
-  var setQuaternionFromEulerOrientation = (function () {
+  var setQuaternionFromEulerOrientation = (function() {
     var xAxis = new THREE.Vector3(1, 0, 0),
       zAxis = new THREE.Vector3(0, 0, 1),
       euler = new THREE.Euler(),
       qOrientation = new THREE.Quaternion(),
       qX = new THREE.Quaternion().setFromAxisAngle(xAxis, -Math.PI / 2);
 
-    return function (q, a, b, g, o) {
+    return function(q, a, b, g, o) {
       euler.set(b, a, -g, 'YXZ');
       return q
         .setFromEuler(euler)
@@ -231,7 +251,7 @@ var updateCameraQuaternion = (function () {
     };
   }());
 
-  return function () {
+  return function() {
     setQuaternionFromEulerOrientation(resultQuaternion, alpha, beta, gamma, screenOrientationAngle);
 
     if (resultQuaternion.angleTo(previousQuaternion) < quaternionRotationThreshold) {
@@ -249,7 +269,7 @@ function animate() {
   requestAnimationFrame(animate);
 
   if (sceneUpdated) {
-    rotatedLabels.forEach(function (label) {
+    rotatedLabels.forEach(function(label) {
       label.material.rotation = -camera.rotation.z;
     });
 
@@ -258,4 +278,7 @@ function animate() {
     sceneUpdated = false;
   }
 }
+
+init();
+animate();
 
