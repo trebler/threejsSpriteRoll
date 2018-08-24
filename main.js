@@ -127,28 +127,30 @@ function init() {
 
   // Label sprites to be rotated by -camera.rotation.z
   var label1 = createLabelSprite('10º label (rotated)');
-  altAzToVec3(10, 100, 1500, label1.position);
+  altAzToVec3(10, 110, 1500, label1.position);
   scene.add(label1);
 
   var label2 = createLabelSprite('90º label (rotated)');
-  altAzToVec3(90, 100, 1500, label2.position);
+  altAzToVec3(90, 110, 1500, label2.position);
   scene.add(label2);
 
   var label3 = createLabelSprite('45º label (rotated)');
-  altAzToVec3(45, 100, 1500, label3.position);
+  altAzToVec3(45, 110, 1500, label3.position);
   scene.add(label3);
+
+  rotatedLabels.push(label1, label2, label3);
 
   // Label sprites not to be rotated
   var label4 = createLabelSprite('10º label (non-rotated)');
-  altAzToVec3(10, 70, 1500, label4.position);
+  altAzToVec3(10, 60, 1500, label4.position);
   scene.add(label4);
 
   var label5 = createLabelSprite('90º label (non-rotated)');
-  altAzToVec3(90, 70, 1500, label5.position);
+  altAzToVec3(90, 60, 1500, label5.position);
   scene.add(label5);
 
   var label6 = createLabelSprite('45º label (non-rotated)');
-  altAzToVec3(45, 70, 1500, label6.position);
+  altAzToVec3(45, 60, 1500, label6.position);
   scene.add(label6);
 
   var geometry = new THREE.SphereBufferGeometry(camera.far, 90, 90),
