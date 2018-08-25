@@ -250,6 +250,8 @@ var updateCameraQuaternion = (function() {
         .multiply(qOrientation.setFromAxisAngle(zAxis, -o));
     };
   }());
+  
+  var vec = new THREE.Vector3();
 
   return function() {
     setQuaternionFromEulerOrientation(resultQuaternion, alpha, beta, gamma, screenOrientationAngle);
@@ -260,6 +262,8 @@ var updateCameraQuaternion = (function() {
 
     previousQuaternion.copy(resultQuaternion);
     camera.quaternion.copy(resultQuaternion);
+    
+    console.log(camera.getWorldDirection(vec));
 
     sceneUpdated = true;
   };
